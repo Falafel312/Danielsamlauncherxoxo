@@ -1,11 +1,14 @@
 import { Check, GripHorizontal, X } from 'lucide-react';
 import type { Catalog, Live, Settings } from './types';
-import { chartPoints, wavesForItem } from './metrics';
+import { chartPoints, nextBuildItem, wavesForItem } from './metrics';
 import { itemImage } from './data';
+import { useBuild } from './hooks';
 
 export default function OverlayPanel({ live, settings, catalog, editing = false, preview = false, onClose, onLock }: { live: Live | null; settings: Settings; catalog: Catalog; editing?: boolean; preview?: boolean; onClose?(): void; onLock?(): void }) {
-  const waves = wavesForItem(live, settings.targetItemId, catalog.items);
-  const target = catalog.items[String(settings.targetItemId)];
+  const { build, loading, error } = useBuild(settings.widgets.waves ? live?.championId || '' : '', live?.role || 'auto');
+  const next = nextBuildItem(live, build, catalog.items);
+  const waves = wavesForItem(live, next?.id || 0, catalog.items);
+  const target = catalog.items[String(next?.id)];
   const history = live?.csHistory || [];
   const maximum = Math.max(settings.csTarget + 2, ...history.map(point => point.value));
   const goalY = 80 - settings.csTarget / maximum * 72;
@@ -19,7 +22,7 @@ export default function OverlayPanel({ live, settings, catalog, editing = false,
     </div>}
     <div className="hud-secondary">
       {settings.widgets.vision && <div className="hud-metric" title={live?.vision == null ? 'Vision score is unavailable from the game client.' : undefined}><span className="hud-label">Vision</span><strong>{live?.vision == null ? '—' : Math.floor(live.vision)}</strong></div>}
-      {settings.widgets.waves && <div className="hud-metric hud-waves" title={waves?.owned ? 'Item owned' : waves?.count === 0 ? 'Ready to buy' : 'Estimated full waves on standard Rift. Cannons averaged; future passive and bonus gold excluded.'}><span className="hud-label">Waves to item</span><div><strong>{waves ? waves.owned ? '✓' : waves.count === 0 ? '0' : `~${waves.count}` : '—'}</strong>{target && <img src={itemImage(settings.targetItemId, catalog.version)} alt={target.name} title={`${target.name}${waves?.owned ? ' · Owned' : ''}`}/>}</div></div>}
+      {settings.widgets.waves && <div className="hud-metric hud-waves" data-next-item={next?.id || 0} title={loading ? 'Finding your next item…' : error || (next?.complete ? 'Recommended build complete' : waves?.count === 0 ? 'Ready to buy' : 'Next item from your OP.GG build and inventory. Estimated full waves; future passive and bonus gold excluded.')}><span className="hud-label">Waves to item</span><div><strong>{next?.complete ? '✓' : waves ? waves.count === 0 ? '0' : `~${waves.count}` : loading ? '…' : '—'}</strong>{target && <img src={itemImage(next!.id, catalog.version)} alt={target.name} title={target.name}/>}</div></div>}
     </div>
     {settings.widgets.goal && <div className="hud-goal"><div><span className="hud-label">CS goal</span><strong>{settings.csTarget.toFixed(1)}<small> / min</small></strong></div><span className={`hud-goal-delta ${deficit >= 0 ? 'positive' : ''}`}>{live ? `${deficit > 0 ? '+' : ''}${deficit} CS` : '—'}</span><div className="hud-progress"><i style={{ width: `${Math.min(100, (live?.csPerMin || 0) / settings.csTarget * 100)}%` }}/></div></div>}
     {!hasWidgets && <div className="hud-empty">All widgets hidden</div>}

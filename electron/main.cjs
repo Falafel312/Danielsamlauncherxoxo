@@ -13,7 +13,7 @@ app.setName('DPM.lol');
 let getBuild; let csSamples = []; let lastLiveIdentity = ''; let lastLiveTime = 0;
 let mainWindow, overlayWindow, credentials, cachedLockfile, timer, updateTimer, updateService, polling = false, lastProfile = 0, lastDiscovery = 0, settingsFile, overlayBounds;
 let saveTail = Promise.resolve();
-const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', targetItemId: 3089, autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, waves: true, goal: true } };
+const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, waves: true, goal: true } };
 let state = { connection: 'offline', phase: 'None', summoner: null, ranked: null, matches: [], draft: null, live: null, settings: defaults, overlay: { visible: false, editing: false }, shortcuts: { toggle: false, edit: false }, lastUpdated: null };
 const productionUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
 const devUrl = !app.isPackaged && process.env.RIFT_DEV_URL === 'http://127.0.0.1:5173' ? process.env.RIFT_DEV_URL : null;

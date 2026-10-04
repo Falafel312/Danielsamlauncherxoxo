@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Download, ExternalLink, RefreshCw, Star } from 'lucide-react';
-import type { Catalog, Champion, Rune, RunePage, RunePath, Settings } from './types';
+import type { Catalog, Champion, Rune, RunePage, RunePath } from './types';
 import { defaultRunePage, runeImage, strip } from './data';
 import { ItemIcon, SectionHeading } from './components';
 import { useBuild } from './hooks';
@@ -12,7 +12,7 @@ function savedPage(champion: Champion, catalog: Catalog) {
   try { const page = JSON.parse(localStorage.getItem(`rift.runes.${champion.id}`) || 'null') as RunePage | null; if (page && catalog.runes.some(p => p.id === page.primaryStyleId) && catalog.runes.some(p => p.id === page.subStyleId) && page.selectedPerkIds?.length === 9 && page.primaryStyleId !== page.subStyleId) return page; } catch {}
   return null;
 }
-export default function Builds({ champion, catalog, onChoose, onToast, favorite, onFavorite, saveSettings }: { champion: Champion; catalog: Catalog; onChoose(id: string): void; onToast(message: string): void; favorite: boolean; onFavorite(): void; saveSettings(input: Partial<Settings>): Promise<void> }) {
+export default function Builds({ champion, catalog, onChoose, onToast, favorite, onFavorite }: { champion: Champion; catalog: Catalog; onChoose(id: string): void; onToast(message: string): void; favorite: boolean; onFavorite(): void; }) {
   const [tab, setTab] = useState<'build' | 'runes'>('build');
   const [role, setRole] = useState('auto');
   const { build, loading, error, refresh } = useBuild(champion.id, role);
@@ -42,8 +42,7 @@ export default function Builds({ champion, catalog, onChoose, onToast, favorite,
     try { const result = await window.rift.importRunes(page); onToast(result.message); if (result.ok) localStorage.setItem(`rift.runes.${champion.id}`, JSON.stringify(page)); }
     catch { onToast('Rune import failed. Check your League connection.'); } finally { setImporting(false); }
   };
-  const track = async (id: number) => { await saveSettings({ targetItemId: id }); onToast(`Tracking waves to ${catalog.items[String(id)].name}.`); };
-  const itemGroup = (title: string, ids: number[], numbered = false) => <section className="build-stage"><h3>{title}</h3><div className="item-line">{ids.map((id, i) => <div className="build-item" key={`${id}-${i}`}>{numbered && <span className="item-order">{String(i + 1).padStart(2, '0')}</span>}<ItemIcon id={id} catalog={catalog} large/><strong>{catalog.items[String(id)]?.name}</strong><span>{catalog.items[String(id)]?.gold.total.toLocaleString()} gold</span><button className="text-button" onClick={() => track(id)} aria-label={`Track waves to ${catalog.items[String(id)]?.name}`}>Track item<ArrowRight size={14}/></button></div>)}</div></section>;
+  const itemGroup = (title: string, ids: number[], numbered = false) => <section className="build-stage"><h3>{title}</h3><div className="item-line">{ids.map((id, i) => <div className="build-item" key={`${id}-${i}`}>{numbered && <span className="item-order">{String(i + 1).padStart(2, '0')}</span>}<ItemIcon id={id} catalog={catalog} large/><strong>{catalog.items[String(id)]?.name}</strong><span>{catalog.items[String(id)]?.gold.total.toLocaleString()} gold</span></div>)}</div></section>;
   return <div className="build-page">
     <div className="page-heading"><div><h1>Builds & runes</h1><p>Global · Emerald+</p></div><div className="build-selects"><label><span className="field-label">Champion</span><select aria-label="Select champion for build" value={champion.id} onChange={event => onChoose(event.target.value)}>{catalog.champions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label><span className="field-label">Role</span><select aria-label="Build role" value={role} onChange={event => setRole(event.target.value)}>{[['auto', 'Main role'], ['top', 'Top'], ['jungle', 'Jungle'], ['mid', 'Mid'], ['adc', 'Bottom'], ['support', 'Support']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className={`icon-button ${favorite ? 'favorited' : ''}`} aria-label={favorite ? 'Unfavorite champion' : 'Favorite champion'} aria-pressed={favorite} onClick={onFavorite}><Star size={19} fill={favorite ? 'currentColor' : 'none'}/></button></div></div>
     <div className="build-source-bar"><span>{build ? <><a href={build.sourceUrl} target="_blank" rel="noreferrer">OP.GG<ExternalLink size={13}/></a><span>Patch {build.patch || '—'}</span><span>{build.stale ? 'Offline cache' : 'Updated'} {new Date(build.fetchedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></> : loading ? 'Loading OP.GG…' : 'OP.GG'}</span><button className="icon-button" aria-label="Refresh build" disabled={loading} onClick={refresh}><RefreshCw size={17} className={loading ? 'spin' : ''}/></button></div>

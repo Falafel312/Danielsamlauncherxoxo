@@ -100,7 +100,7 @@ export default function App() {
 
       {page==='champions'&&<Champions catalog={catalog} favorites={favorites} toggleFavorite={toggle} selectChampion={selectChampion}/>}
 
-      {page==='builds'&&<Builds key={champion.id} saveSettings={saveSettings} champion={champion} catalog={catalog} onChoose={selectChampion} onToast={notify} favorite={favorites.includes(champion.id)} onFavorite={()=>toggle(champion.id)}/>}
+      {page==='builds'&&<Builds key={champion.id} champion={champion} catalog={catalog} onChoose={selectChampion} onToast={notify} favorite={favorites.includes(champion.id)} onFavorite={()=>toggle(champion.id)}/>}
 
       {page==='history'&&<MatchHistory matches={view.matches} catalog={catalog} onMatch={setMatch} refresh={refresh} refreshing={refreshing} demo={demo}/>}
 

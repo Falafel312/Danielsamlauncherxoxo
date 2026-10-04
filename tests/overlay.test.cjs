@@ -1,9 +1,40 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { goldForItem, wavesForItem, averageWaveGold, chartPoints } = require('../src/metrics.ts');
+const { goldForItem, nextBuildItem, wavesForItem, averageWaveGold, chartPoints } = require('../src/metrics.ts');
 const { normalizeLive, sanitizeSettings, upsertRunePage } = require('../electron/league.cjs');
 const items = { 1: { gold: { total: 300 } }, 2: { gold: { total: 800 }, from: ['1', '1'] }, 3: { gold: { total: 2000 }, from: ['2', '1'] } };
 const live = (gold, inventory) => ({ gold, items: inventory.map(([id, count = 1]) => ({ id, count })) });
+const buildItems = { ...items, 1001: { gold: { total: 300 }, tags: ['Boots'] }, 3006: { gold: { total: 1100 }, from: ['1001'], tags: ['Boots'] }, 3047: { gold: { total: 1200 }, from: ['1001'], tags: ['Boots'] }, 101: { gold: { total: 2700 }, from: ['201'] }, 102: { gold: { total: 3000 }, from: ['202'] }, 103: { gold: { total: 3200 } }, 104: { gold: { total: 2800 } }, 105: { gold: { total: 3100 } }, 106: { gold: { total: 3400 } }, 201: { gold: { total: 900 } }, 202: { gold: { total: 1200 } }, 501: { gold: { total: 2700, purchasable: false }, from: ['101'] } };
+const recommended = { champion: 'Ahri', core: [101, 102, 103], boots: [3006], alternatives: [104, 105, 106] };
+const inventoryGame = ids => ({ ...live(0, ids.map(id => [id])), championId: 'Ahri' });
+
+test('automatic target progresses through core items and boots as purchases appear', () => {
+  assert.equal(nextBuildItem(inventoryGame([]), recommended, buildItems).id, 101);
+  assert.equal(nextBuildItem(inventoryGame([101]), recommended, buildItems).id, 3006);
+  assert.equal(nextBuildItem(inventoryGame([101, 3006]), recommended, buildItems).id, 102);
+  assert.equal(nextBuildItem(inventoryGame([101, 3006, 102]), recommended, buildItems).id, 103);
+});
+
+test('automatic target follows owned components and accepts a different completed boot', () => {
+  assert.equal(nextBuildItem(inventoryGame([202]), recommended, buildItems).id, 102);
+  assert.equal(nextBuildItem(inventoryGame([101, 3047]), recommended, buildItems).id, 102);
+  assert.equal(nextBuildItem(inventoryGame([1001]), recommended, buildItems).id, 3006);
+  assert.equal(nextBuildItem(inventoryGame([2422]), recommended, buildItems).id, 3006);
+  assert.equal(goldForItem(inventoryGame([2422]), 3006, buildItems).needed, 800);
+});
+
+test('automatic target recognizes upgrades and maps unpurchasable transformations to their base', () => {
+  assert.equal(nextBuildItem(inventoryGame([501, 3006]), recommended, buildItems).id, 102);
+  assert.equal(nextBuildItem(inventoryGame([]), { ...recommended, core: [501, 102] }, buildItems).id, 101);
+});
+
+test('automatic target finishes a six-item plan and waits for the matching champion build', () => {
+  assert.deepEqual(nextBuildItem(inventoryGame([101, 102, 103, 104, 105, 3006]), recommended, buildItems), { id: 0, complete: true });
+  assert.equal(nextBuildItem(null, recommended, buildItems), null);
+  assert.equal(nextBuildItem(inventoryGame([]), null, buildItems), null);
+  assert.equal(nextBuildItem({ ...inventoryGame([]), championId: 'Jinx' }, recommended, buildItems), null);
+  assert.equal(nextBuildItem(inventoryGame([]), { ...recommended, core: [], boots: [], alternatives: [] }, buildItems), null);
+});
 
 test('gold tracker subtracts only recipe components and available gold', () => {
   assert.deepEqual(goldForItem(live(500, [[1], [99]]), 3, items), { needed: 1200, remaining: 1700, owned: false });
@@ -71,16 +102,18 @@ test('vision reads own ward score; unavailable is different from zero', () => {
   const raw = { gameData: { gameTime: 600 }, activePlayer: { riotId: 'Self#TEST' }, allPlayers: [{ riotId: 'Other#TEST', scores: { wardScore: 99 } }, { riotId: 'Self#TEST', scores: { wardScore: 0 } }] };
   assert.equal(normalizeLive(raw).vision, 0);
   raw.allPlayers[1].scores.wardScore = 12.8;
+  raw.allPlayers[1].position = 'MIDDLE';
   assert.equal(normalizeLive(raw).vision, 12.8);
+  assert.equal(normalizeLive(raw).role, 'mid');
   delete raw.allPlayers[1].scores.wardScore;
   assert.equal(normalizeLive(raw).vision, null);
 });
 test('new overlay settings survive migration and reject invalid values', () => {
-  const defaults = { csDisplay: 'graph', targetItemId: 3089, widgets: { cs: true, vision: true, waves: true, goal: true } };
+  const defaults = { csDisplay: 'graph', widgets: { cs: true, vision: true, waves: true, goal: true } };
   const migrated = sanitizeSettings({ csDisplay: 'number', targetItemId: 3031, widgets: { kda: true, build: true, cs: false } }, defaults);
   assert.deepEqual(migrated.widgets, { cs: false, vision: true, waves: true, goal: true });
-  assert.equal(migrated.csDisplay, 'number'); assert.equal(migrated.targetItemId, 3031);
-  assert.equal(sanitizeSettings({ csDisplay: 'fake', targetItemId: -1 }, defaults).targetItemId, 3089);
+  assert.equal(migrated.csDisplay, 'number'); assert.equal(migrated.targetItemId, undefined);
+  assert.equal(sanitizeSettings({ csDisplay: 'fake', targetItemId: -1 }, defaults).targetItemId, undefined);
   assert.equal(sanitizeSettings({ csDisplay: 'fake' }, defaults).csDisplay, 'graph');
   assert.equal(sanitizeSettings({ widgets: { gold: false } }, defaults).widgets.waves, false);
   assert.equal(sanitizeSettings({ widgets: { waves: true, gold: false } }, defaults).widgets.waves, true);

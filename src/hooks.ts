@@ -31,12 +31,13 @@ export function useBuild(champion: string, role = 'auto') {
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     setBuild(null); setError('');
-    if (!champion) return;
+    if (!champion) { setLoading(false); return; }
     setLoading(true);
     const request = window.rift ? window.rift.getBuild(champion, role, revision > 0) : fetch(`/api/build?champion=${encodeURIComponent(champion)}&role=${encodeURIComponent(role)}&refresh=${revision > 0}`).then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Build unavailable.'); return result; });
-    request.then(result => { if (active) setBuild(result); }).catch(error => { if (active) setError(error.message || 'Could not reach OP.GG.'); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    request.then(result => { if (active) setBuild(result); }).catch(error => { if (active) { setError(error.message || 'Could not reach OP.GG.'); retry = setTimeout(() => setRevision(previous => previous + 1), 60000); } }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; clearTimeout(retry); };
   }, [champion, role, revision]);
   return { build, loading, error, refresh: () => setRevision(previous => previous + 1) };
 }
