@@ -8,8 +8,8 @@ A Windows League companion with player stats, OP.GG builds and runes, and a mini
 
 - DPM.lol branding throughout the app, window titles, launcher, and installer.
 - Player stats replace the champion spotlight: win rate, KDA, CS/min trend, vision, and rank.
-- Translucent charcoal panels, larger controls and numbers, and fewer labels.
-- Four independent overlay widgets: **CS/min**, **vision score**, **gold to item**, and **CS/min goal**.
+- Compact graphite panels, subtle highlights and shadows, translucent surfaces, and large readable numbers.
+- Four independent overlay widgets: **CS/min**, **vision score**, **waves to item**, and **CS/min goal**.
 - CS/min supports **Number** and **Graph + number** modes. Opacity, size, target item, and CS goal are configurable.
 - The overlay has no champion banner or logo. Its move controls appear only when unlocked.
 - Builds and rune presets load from [OP.GG](https://op.gg/lol/champions), with champion and role selection, source links, patch, and fetch time.
@@ -26,7 +26,7 @@ The installed app downloads updates automatically. The portable **DPM.lol.exe** 
 | Ctrl + Shift + L | Unlock or lock position |
 | Ctrl + K | Search champions |
 
-Choose an item in **Overlay**, or click **Track item** in a build. The gold counter subtracts available gold and owned components from that item's recipe cost. It shows a check when the item is already owned.
+Choose an item in **Overlay**, or click **Track item** in a build. **Waves to item** subtracts current gold and owned recipe components, then rounds up the remaining cost to estimated full waves at the current game time. It displays `~N`, `0` when affordable, or a check when owned. Live gold and inventory refresh every three seconds, so kills, assists, purchases, and other income recalculate the estimate. The standard Rift model includes cannon gold growth (+1 every 90 seconds), averages cannon frequency, adjusts for mid/late-game wave composition, and assumes every last hit. It excludes passive gold, role bonuses/penalties, super minions, and other income. Non-Rift modes display a dash. Minion rewards/composition are based on [Riot's 26.1 changes](https://www.leagueoflegends.com/en-us/news/game-updates/patch-26-1-notes/); this is a farming estimate, not a prediction of individual waves.
 
 CS history records samples while DPM.lol is connected to a game; it does not invent earlier samples. Missing vision data displays a dash. Sample data is available only in explicit demo mode and the labeled settings preview.
 

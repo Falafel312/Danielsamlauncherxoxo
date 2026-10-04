@@ -60,6 +60,7 @@ function normalizeLive(raw) {
     health: Number(active.championStats?.currentHealth) || 0, maxHealth: Number(active.championStats?.maxHealth) || 0,
     attackDamage: Number(active.championStats?.attackDamage) || 0, abilityPower: Number(active.championStats?.abilityPower) || 0,
     gameMode: raw.gameData.gameMode || 'CLASSIC',
+    mapNumber: Number.isInteger(raw.gameData.mapNumber) ? raw.gameData.mapNumber : null,
   };
 }
 function normalizeMatches(raw, summonerId) {
@@ -96,7 +97,10 @@ function sanitizeSettings(input, previous) {
   if (typeof input?.csTarget === 'number' && Number.isFinite(input.csTarget)) result.csTarget = Math.max(1, Math.min(12, input.csTarget));
   if (['number', 'graph'].includes(input?.csDisplay)) result.csDisplay = input.csDisplay;
   if (Number.isInteger(input?.targetItemId) && input.targetItemId >= 0 && input.targetItemId < 1000000) result.targetItemId = input.targetItemId;
-  if (input?.widgets && typeof input.widgets === 'object') result.widgets = Object.fromEntries(['cs','vision','gold','goal'].map(key => [key, typeof input.widgets[key] === 'boolean' ? input.widgets[key] : previous.widgets[key] ?? true]));
+  if (input?.widgets && typeof input.widgets === 'object') result.widgets = Object.fromEntries(['cs','vision','waves','goal'].map(key => {
+    const value = input.widgets[key] ?? (key === 'waves' ? input.widgets.gold : undefined);
+    return [key, typeof value === 'boolean' ? value : previous.widgets[key] ?? (key === 'waves' ? previous.widgets.gold : undefined) ?? true];
+  }));
   return result;
 }
 async function upsertRunePage(credentials, input, paths, request = requestLocal) {

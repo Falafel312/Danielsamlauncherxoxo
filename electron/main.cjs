@@ -13,7 +13,7 @@ app.setName('DPM.lol');
 let getBuild; let csSamples = []; let lastLiveIdentity = ''; let lastLiveTime = 0;
 let mainWindow, overlayWindow, credentials, cachedLockfile, timer, updateTimer, updateService, polling = false, lastProfile = 0, lastDiscovery = 0, settingsFile, overlayBounds;
 let saveTail = Promise.resolve();
-const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', targetItemId: 3089, autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, gold: true, goal: true } };
+const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', targetItemId: 3089, autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, waves: true, goal: true } };
 let state = { connection: 'offline', phase: 'None', summoner: null, ranked: null, matches: [], draft: null, live: null, settings: defaults, overlay: { visible: false, editing: false }, shortcuts: { toggle: false, edit: false }, lastUpdated: null };
 const productionUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
 const devUrl = !app.isPackaged && process.env.RIFT_DEV_URL === 'http://127.0.0.1:5173' ? process.env.RIFT_DEV_URL : null;
@@ -37,7 +37,7 @@ async function createMain() {
 }
 function containedBounds() {
   const display = overlayBounds ? screen.getDisplayMatching(overlayBounds).workArea : screen.getPrimaryDisplay().workArea;
-  const width = Math.round(368 * state.settings.scale), height = Math.round(550 * state.settings.scale);
+  const width = Math.round(336 * state.settings.scale), height = Math.round(470 * state.settings.scale);
   return { x: Math.max(display.x, Math.min(overlayBounds?.x ?? display.x + display.width - width - 28, display.x + display.width - width)), y: Math.max(display.y, Math.min(overlayBounds?.y ?? display.y + 160, display.y + display.height - height)), width, height };
 }
 async function ensureOverlay() {
@@ -153,6 +153,8 @@ else {
     state.shortcuts.edit = globalShortcut.register('CommandOrControl+Shift+L', async () => { await showOverlay(true); setEditing(!state.overlay.editing); });
     await createMain();
     poll().catch(() => {});
+    // Every fresh gold/inventory snapshot recalculates Waves to item in the HUD,
+    // including gold from kills, assists, passive income, and component purchases.
     timer = setInterval(() => poll().catch(() => {}), 3000);
     if (state.settings.updateUrl) setTimeout(() => updateService.check(), 6000);
     updateTimer = setInterval(() => { if (state.settings.updateUrl) updateService.check(); }, 4 * 60 * 60 * 1000);
