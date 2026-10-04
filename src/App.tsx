@@ -16,6 +16,7 @@ import Dashboard from './Dashboard';
 import RiotAccount from './RiotAccount';
 
 import OverlayStudio from './OverlayStudio';
+import CompanionOverlay from './CompanionOverlay';
 
 import { UpdatePreferences, UpdateBanner } from './Updates';
 
@@ -52,8 +53,9 @@ export default function App() {
   const searchRef=useRef<HTMLInputElement>(null);
 
   const overlayRoute=location.hash.startsWith('#/overlay');
+  const companionRoute=location.hash.startsWith('#/companion');
 
-  useEffect(()=> { document.body.classList.toggle('overlay-window',overlayRoute); return ()=>document.body.classList.remove('overlay-window'); },[overlayRoute]);
+  useEffect(()=> { document.body.classList.toggle('overlay-window',overlayRoute || companionRoute); return ()=>document.body.classList.remove('overlay-window'); },[overlayRoute,companionRoute]);
 
   useEffect(()=> { const handler=(e:KeyboardEvent)=> { if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();searchRef.current?.focus();} if(e.key==='Escape')setSearch(''); }; window.addEventListener('keydown',handler); return ()=>window.removeEventListener('keydown',handler); },[]);
 
@@ -73,11 +75,15 @@ export default function App() {
 
   const overlayAction=async(action:'show'|'hide'|'toggle'|'edit'|'reset')=> {if(!window.rift){notify('The real overlay is available in the Windows desktop app.');return;}try{await window.rift.overlay(action);if(action==='show')notify('Overlay opened.');}catch{notify('The overlay could not open. Try restarting DPM.lol.');}};
 
+  if((overlayRoute || companionRoute) && !catalog)return null;
+
   if(catalogError)return <div className="boot-state"><Logo/><h2>Champion data could not load</h2><p>{catalogError}</p><button className="primary-button" onClick={()=>location.reload()}>Retry</button></div>;
 
   if(!catalog)return <div className="boot-state"><Logo/><LoaderCircle className="spin"/><span>Loading champion data…</span></div>;
 
   if(overlayRoute)return <div className="native-overlay" style={{zoom:state.settings.scale}}><OverlayPanel live={state.live} settings={state.settings} catalog={catalog} editing={state.overlay.editing} preview={false} onClose={()=>overlayAction('hide')} onLock={()=>overlayAction('edit')}/></div>;
+
+  if(companionRoute)return <CompanionOverlay state={state} catalog={catalog}/>;
 
   const view=demo?{...demoState,settings:state.settings}:state;
 

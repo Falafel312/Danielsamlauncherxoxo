@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('rift', {
   getBuild: (champion, role, refresh) => ipcRenderer.invoke('rift:build', champion, role, refresh),
   updates: (action, url) => ipcRenderer.invoke('rift:updates', action, url),
   overlay: action => ipcRenderer.invoke('rift:overlay', action),
+  previewReminder: kind => ipcRenderer.invoke('rift:preview-reminder', kind),
   window: action => ipcRenderer.invoke('rift:window', action),
   onState: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('rift:state', listener); return () => ipcRenderer.removeListener('rift:state', listener); },
 });

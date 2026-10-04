@@ -20,7 +20,7 @@ test('rune validation rejects same paths, wrong slots, duplicate secondary slots
 const defaults = { autoOverlay:true,clickThrough:true,opacity:.94,scale:1,csTarget:7,widgets:{kda:true,cs:true,gold:true,build:true} };
 test('preferences clamp overlay dimensions and reject unknown or invalid fields', () => {
   const settings = sanitizeSettings({ opacity:99,scale:-1,csTarget:50,autoOverlay:false,clickThrough:'yes',widgets:{cs:false,secret:true},password:'not-persisted' },defaults);
-  assert.equal(settings.opacity,1); assert.equal(settings.scale,.8); assert.equal(settings.csTarget,12); assert.equal(settings.autoOverlay,false); assert.equal(settings.clickThrough,true); assert.equal(settings.widgets.cs,false); assert.equal(settings.widgets.secret,undefined); assert.equal(settings.password,undefined);
+  assert.equal(settings.opacity,1); assert.equal(settings.scale,.45); assert.equal(settings.csTarget,12); assert.equal(settings.autoOverlay,false); assert.equal(settings.clickThrough,true); assert.equal(settings.widgets.cs,false); assert.equal(settings.widgets.secret,undefined); assert.equal(settings.password,undefined);
   assert.equal(sanitizeSettings({opacity:NaN,scale:Infinity},defaults).opacity,.94); assert.equal(defaults.widgets.cs,true);
 });
 test('live identity requires the full Riot ID, including the tag', () => {

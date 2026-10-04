@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
-module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing,getOverlay }) {
+module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing,getOverlay,companion }) {
   const root = path.join(__dirname,'../.qa');
   let fixtureServer;
   const report = { passed:false, checks:[], rendererErrors:[], client:null };
@@ -120,6 +120,7 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     for (let i=0;i<90 && getState().lastUpdated===lastPoll;i++) await delay(100);
     assert.notEqual(getState().lastUpdated, lastPoll, 'Live state must refresh within ten seconds');
     report.checks.push('New reward gold recalculates the native HUD; automatic live polling stays below ten seconds');
+    await require('./companion-harness.cjs')({ mainWindow, getState, companion, getOverlay, root, report });
     await showOverlay(false);assert.equal(overlay.isVisible(),false);
     report.checks.push('Native overlay is always on top, unlocks for dragging, relocks without focus, and hides');
     await navigate('Settings');

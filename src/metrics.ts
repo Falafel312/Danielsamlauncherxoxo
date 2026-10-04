@@ -1,4 +1,27 @@
-import type { Build, Catalog, Live } from './types.ts';
+import type { Build, Catalog, Live, Enemy } from './types.ts';
+
+export function inventoryValue(inventory: Enemy['items'], items: Catalog['items']): number | null {
+  if (!Array.isArray(inventory)) return null;
+  let total = 0;
+  for (const owned of inventory) {
+    if (owned.id === 0) continue;
+    const value = items[String(owned.id)]?.gold?.total;
+    const count = owned.count ?? 1;
+    if (!Number.isFinite(value) || value < 0 || !Number.isInteger(count) || count < 0 || count > 100) return null;
+    total += value * count;
+  }
+  return total;
+}
+
+export function enemyComparisons(live: Live, items: Catalog['items']) {
+  const own = inventoryValue(live.items, items);
+  const roles = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+  return (live.enemies || []).map(enemy => {
+    const value = inventoryValue(enemy.items, items);
+    return { ...enemy, itemDelta: value == null || own == null ? null : value - own,
+      csDelta: enemy.cs == null || !Number.isFinite(live.cs) ? null : enemy.cs - live.cs };
+  }).sort((a, b) => (roles.indexOf(a.role) < 0 ? 5 : roles.indexOf(a.role)) - (roles.indexOf(b.role) < 0 ? 5 : roles.indexOf(b.role)));
+}
 
 export function nextBuildItem(live: Live | null, build: Build | null, items: Catalog['items']) {
   if (!live || !build || build.champion !== live.championId) return null;

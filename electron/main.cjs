@@ -7,6 +7,8 @@ const { DEFAULT_ACCOUNT, validateAccount } = require('../shared/riot.cjs');
 const { createProfileController } = require('./riot-profile.cjs');
 const { createUpdateService, parseUpdateProvider } = require('./updates.cjs');
 const { createBuildService } = require('./builds.cjs');
+const { REMINDERS, SCOREBOARD } = require('../shared/overlay-settings.cjs');
+const { createCompanionController } = require('./companion.cjs');
 const releaseConfig = require('./update-config.json');
 if (process.env.RIFT_TEST_USER_DATA) app.setPath('userData', process.env.RIFT_TEST_USER_DATA);
 // Preserve the existing update identity and preferences across the display-name change.
@@ -15,13 +17,14 @@ app.setName('DPM.lol');
 let getBuild; let csSamples = []; let lastLiveIdentity = ''; let lastLiveTime = 0;
 let mainWindow, overlayWindow, timer, profileTimer, profileController, updateTimer, updateService, polling = false, settingsFile, overlayBounds;
 let saveTail = Promise.resolve();
-const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, waves: true, goal: true } };
-let state = { connection: 'offline', phase: 'None', summoner: null, ranked: null, matches: [], account: { ...DEFAULT_ACCOUNT }, profile: { status: 'unconfigured', message: '', lastUpdated: null }, live: null, settings: defaults, overlay: { visible: false, editing: false }, shortcuts: { toggle: false, edit: false }, lastUpdated: null };
+let companion;
+const defaults = { autoOverlay: true, clickThrough: true, opacity: 0.68, scale: 1, csTarget: 8, csDisplay: 'graph', autoDownloadUpdates: true, updateUrl: releaseConfig.url, widgets: { cs: true, vision: true, waves: true }, reminders: { ...REMINDERS }, scoreboard: { ...SCOREBOARD } };
+let state = { connection: 'offline', phase: 'None', summoner: null, ranked: null, matches: [], account: { ...DEFAULT_ACCOUNT }, profile: { status: 'unconfigured', message: '', lastUpdated: null }, live: null, settings: defaults, overlay: { visible: false, editing: false }, companion: { focused: false, tab: false, alerts: [], error: '', previewUntil: 0, previewKind: null }, shortcuts: { toggle: false, edit: false }, lastUpdated: null };
 const productionUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
 const devUrl = !app.isPackaged && process.env.RIFT_DEV_URL === 'http://127.0.0.1:5173' ? process.env.RIFT_DEV_URL : null;
 function isTrusted(event) { const frame = event.senderFrame; if (!frame || frame !== event.sender.mainFrame) return false; try { const url = new URL(frame.url); return devUrl ? url.origin === devUrl : url.protocol === 'file:' && url.pathname === new URL(productionUrl).pathname; } catch { return false; } }
 function handle(channel, fn) { ipcMain.handle(channel, (event, ...args) => { if (!isTrusted(event)) throw new Error('Untrusted app frame.'); return fn(event, ...args); }); }
-function emit() { for (const window of [mainWindow, overlayWindow]) if (window && !window.isDestroyed()) window.webContents.send('rift:state', state); }
+function emit() { for (const window of [mainWindow, overlayWindow, companion?.getWindow()]) if (window && !window.isDestroyed()) window.webContents.send('rift:state', state); }
 function save() { const contents = JSON.stringify({ settings: state.settings, account: state.account, overlayBounds }, null, 2); const operation = saveTail.catch(() => {}).then(async () => { const next = `${settingsFile}.tmp`; await fs.writeFile(next, contents); await fs.rename(next, settingsFile); }); saveTail = operation; return operation; }
 function secure(window) {
   window.webContents.setWindowOpenHandler(({ url }) => { try { const parsed = new URL(url); if (parsed.protocol === 'https:' && (['developer.riotgames.com', 'op.gg'].includes(parsed.hostname) || (parsed.hostname === 'github.com' && parsed.pathname.startsWith('/Falafel312/Danielsamlauncherxoxo/')))) shell.openExternal(url); } catch {} return { action: 'deny' }; });
@@ -39,7 +42,7 @@ async function createMain() {
 }
 function containedBounds() {
   const display = overlayBounds ? screen.getDisplayMatching(overlayBounds).workArea : screen.getPrimaryDisplay().workArea;
-  const width = Math.round(336 * state.settings.scale), height = Math.round(470 * state.settings.scale);
+  const width = Math.round(336 * state.settings.scale), height = Math.round(360 * state.settings.scale);
   return { x: Math.max(display.x, Math.min(overlayBounds?.x ?? display.x + display.width - width - 28, display.x + display.width - width)), y: Math.max(display.y, Math.min(overlayBounds?.y ?? display.y + 160, display.y + display.height - height)), width, height };
 }
 async function ensureOverlay() {
@@ -57,6 +60,8 @@ async function showOverlay(show) {
   else if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
   state.overlay.visible = show;
   if (!show && state.overlay.editing) setEditing(false);
+  if (!show) { state.companion.previewUntil = 0; state.companion.previewKind = null; }
+  companion?.update();
   emit();
 }
 function setEditing(editing) {
@@ -86,6 +91,7 @@ async function poll() {
     if (state.live && !previousLive && state.settings.autoOverlay && process.env.RIFT_DESKTOP_TEST !== '1') await showOverlay(true);
     if (!state.live && previousLive) await showOverlay(false);
     state.lastUpdated = new Date().toISOString();
+    companion?.update();
     emit();
   } finally { polling = false; }
   return state;
@@ -103,7 +109,11 @@ function registerIpc() {
       return { ok: true, message: account.riotId ? 'Account saved. Connecting to Riot…' : 'Account disconnected.' };
     } catch (error) { return { ok: false, message: error.message }; }
   });
-  handle('rift:settings', async (_event, input) => { state.settings = sanitizeSettings(input, state.settings); if (overlayWindow && !overlayWindow.isDestroyed()) { overlayWindow.setBounds(containedBounds()); setEditing(state.overlay.editing); } if (typeof input?.autoDownloadUpdates === 'boolean') updateService.configure(state.settings); await save(); emit(); return state.settings; });
+  handle('rift:settings', async (_event, input) => { state.settings = sanitizeSettings(input, state.settings); if (overlayWindow && !overlayWindow.isDestroyed()) { overlayWindow.setBounds(containedBounds()); setEditing(state.overlay.editing); } if (typeof input?.autoDownloadUpdates === 'boolean') updateService.configure(state.settings); companion?.update(); await save(); emit(); return state.settings; });
+  handle('rift:preview-reminder', async (event, kind) => {
+    if (BrowserWindow.fromWebContents(event.sender) !== mainWindow) throw new Error('Previews are configured from the main app.');
+    await companion.preview(kind);
+  });
   handle('rift:updates', async (event, action, url) => {
     if (BrowserWindow.fromWebContents(event.sender) !== mainWindow) throw new Error('Updates are configured from the main app.');
     if (action === 'configure') { try { parseUpdateProvider(url); updateService.configure({ ...state.settings, updateUrl: url.trim() }); state.settings.updateUrl = url.trim(); await save(); emit(); if (state.settings.updateUrl) updateService.check(); return { ok: true, message: state.settings.updateUrl ? 'Release server saved. Installed builds will check and download new versions automatically.' : 'Release server cleared.' }; } catch (error) { return { ok: false, message: error.message }; } }
@@ -141,6 +151,7 @@ else {
     updateService = createUpdateService({ version: app.getVersion(), supported: installed, emit: updates => { state.updates = updates; emit(); }, isInGame: () => !!state.live || ['InProgress','Reconnect'].includes(state.phase) });
     updateService.configure(state.settings);
     state.updates = updateService.getStatus();
+    companion = createCompanionController({ BrowserWindow, screen, secure, load, state, emit });
     registerIpc();
     state.shortcuts.toggle = globalShortcut.register('CommandOrControl+Shift+O', () => showOverlay(!state.overlay.visible));
     state.shortcuts.edit = globalShortcut.register('CommandOrControl+Shift+L', async () => { await showOverlay(true); setEditing(!state.overlay.editing); });
@@ -153,8 +164,8 @@ else {
     timer = setInterval(() => poll().catch(() => {}), 3000);
     if (state.settings.updateUrl) setTimeout(() => updateService.check(), 6000);
     updateTimer = setInterval(() => { if (state.settings.updateUrl) updateService.check(); }, 4 * 60 * 60 * 1000);
-    if (process.env.RIFT_DESKTOP_TEST === '1' && !app.isPackaged) require('../scripts/desktop-harness.cjs')({ app, mainWindow, getState: () => state, showOverlay, setEditing, getOverlay: () => overlayWindow });
+    if (process.env.RIFT_DESKTOP_TEST === '1' && !app.isPackaged) require('../scripts/desktop-harness.cjs')({ app, mainWindow, getState: () => state, showOverlay, setEditing, getOverlay: () => overlayWindow, companion });
   }).catch(error => { console.error(error.message); app.quit(); });
 }
-app.on('before-quit', () => { clearInterval(timer); clearInterval(profileTimer); clearInterval(updateTimer); globalShortcut.unregisterAll(); });
+app.on('before-quit', () => { companion?.stop(); clearInterval(timer); clearInterval(profileTimer); clearInterval(updateTimer); globalShortcut.unregisterAll(); });
 app.on('window-all-closed', () => app.quit());

@@ -111,7 +111,7 @@ test('vision reads own ward score; unavailable is different from zero', () => {
 test('new overlay settings survive migration and reject invalid values', () => {
   const defaults = { csDisplay: 'graph', widgets: { cs: true, vision: true, waves: true, goal: true } };
   const migrated = sanitizeSettings({ csDisplay: 'number', targetItemId: 3031, widgets: { kda: true, build: true, cs: false } }, defaults);
-  assert.deepEqual(migrated.widgets, { cs: false, vision: true, waves: true, goal: true });
+  assert.deepEqual(migrated.widgets, { cs: false, vision: true, waves: true });
   assert.equal(migrated.csDisplay, 'number'); assert.equal(migrated.targetItemId, undefined);
   assert.equal(sanitizeSettings({ csDisplay: 'fake', targetItemId: -1 }, defaults).targetItemId, undefined);
   assert.equal(sanitizeSettings({ csDisplay: 'fake' }, defaults).csDisplay, 'graph');

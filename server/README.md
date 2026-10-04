@@ -4,7 +4,7 @@ The desktop overlay works without this server or an API key. Account level, rank
 
 ## Local setup on Windows
 
-1. Install Node.js 24 or newer. Download and extract **DPM.lol-Riot-Backend-0.3.0.zip** from [Releases](https://github.com/Falafel312/Danielsamlauncherxoxo/releases/latest), or use this repository.
+1. Install Node.js 24 or newer. Download and extract **DPM.lol-Riot-Backend-0.4.0.zip** from [Releases](https://github.com/Falafel312/Danielsamlauncherxoxo/releases/latest), or use this repository.
 2. From the extracted `DPM.lol-Riot-Backend` folder (or the repository root), run:
 
    ```powershell

@@ -1,6 +1,6 @@
 {
   "name": "dpm-lol",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "League player stats, OP.GG builds and a minimal in-game overlay.",
   "author": "DPM.lol",
@@ -71,6 +71,9 @@
       "owner": "Falafel312",
       "repo": "Danielsamlauncherxoxo",
       "releaseType": "release"
-    }
+    },
+    "asarUnpack": [
+      "electron/game-keys.ps1"
+    ]
   }
 }

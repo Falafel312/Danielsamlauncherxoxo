@@ -4,7 +4,7 @@ import type { AppState, Build, Catalog, Champion, Item, RunePath, Settings } fro
 export function useAppState() {
   const [state, setState] = useState<AppState>(() => {
     if (window.rift) return initialState;
-    try { const saved = JSON.parse(localStorage.getItem('rift.settings') || '{}'); return { ...initialState, settings: { ...initialState.settings, ...saved, widgets: { ...initialState.settings.widgets, ...saved.widgets } } }; } catch { return initialState; }
+    try { const saved = JSON.parse(localStorage.getItem('rift.settings') || '{}'); return { ...initialState, settings: { ...initialState.settings, ...saved, widgets: { ...initialState.settings.widgets, ...saved.widgets }, reminders: { ...initialState.settings.reminders, ...saved.reminders }, scoreboard: { ...initialState.settings.scoreboard, ...saved.scoreboard } } }; } catch { return initialState; }
   });
   const [error, setError] = useState('');
   useEffect(() => { let active = true; const unsub = window.rift?.onState(next=> { if(active) setState(next); }); window.rift?.getState().then(next=> { if(active) setState(next); }).catch(()=>setError('The desktop bridge could not connect. Restart DPM.lol to try again.')); return ()=> { active=false; unsub?.(); }; },[]);

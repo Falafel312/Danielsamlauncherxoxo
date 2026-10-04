@@ -1,4 +1,5 @@
 const https = require('node:https');
+const { sanitizeReminders, sanitizeScoreboard } = require('../shared/overlay-settings.cjs');
 // Riot documents this self-signed HTTPS service on loopback port 2999.
 // The endpoint, port and read-only method cannot be supplied by the renderer.
 const leagueAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true, maxSockets: 2 });
@@ -27,7 +28,14 @@ function normalizeLive(raw) {
     || raw.allPlayers.find(p => active.riotIdGameName && active.riotIdTagLine && p.riotIdGameName === active.riotIdGameName && p.riotIdTagLine === active.riotIdTagLine);
   if (!player) throw new Error('Active player is missing from the live game.');
   const scores = player.scores || {};
-  const seconds = Math.max(0, Number(raw.gameData.gameTime) || 0);
+  const seconds = Number.isFinite(raw.gameData.gameTime) ? Math.max(0, raw.gameData.gameTime) : 0;
+  const events = Array.isArray(raw.events?.Events) ? raw.events.Events : [];
+  function killerTeam(name) {
+    if (!name) return '';
+    const full = raw.allPlayers.filter(p => p.riotId === name || p.summonerName === name);
+    const matches = full.length ? full : raw.allPlayers.filter(p => p.riotIdGameName === name);
+    return matches.length === 1 && ['ORDER', 'CHAOS'].includes(matches[0].team) ? matches[0].team : '';
+  }
   return {
     time: seconds, championName: player.championName || '', championId: String(player.rawChampionName || '').replace(/^game_character_displayname_/, ''),
     name: active.riotId || active.summonerName || 'Summoner', level: Number(active.level) || 1,
@@ -35,6 +43,13 @@ function normalizeLive(raw) {
     cs: Number(scores.creepScore) || 0, csPerMin: seconds > 0 ? (Number(scores.creepScore) || 0) / (seconds / 60) : 0,
     vision: typeof scores.wardScore === 'number' && Number.isFinite(scores.wardScore) ? Math.max(0, scores.wardScore) : null,
     csHistory: [],
+    isDead: player.isDead === true,
+    mana: Number.isFinite(active.championStats?.resourceValue) ? active.championStats.resourceValue : null,
+    maxMana: Number.isFinite(active.championStats?.resourceMax) ? active.championStats.resourceMax : null,
+    resourceType: active.championStats?.resourceType || '',
+    enemies: ['ORDER', 'CHAOS'].includes(player.team) ? raw.allPlayers.filter(p => ['ORDER', 'CHAOS'].includes(p.team) && p.team !== player.team).map(p => ({ championId: String(p.rawChampionName || '').replace(/^game_character_displayname_/, ''), championName: p.championName || '', cs: Number.isFinite(p.scores?.creepScore) ? p.scores.creepScore : null, items: Array.isArray(p.items) ? p.items.map(item => ({ id: item.itemID, count: item.count || 1 })) : null, role: p.position || '' })) : [],
+    eventsAvailable: Array.isArray(raw.events?.Events),
+    dragonKills: [...new Map(events.filter(e => e.EventName === 'DragonKill' && Number.isFinite(e.EventTime) && e.EventTime >= 0).map(e => [`${e.EventID}:${e.EventTime}`, { time: e.EventTime, type: String(e.DragonType || '').toLowerCase(), team: killerTeam(e.KillerName) }])).values()],
     gold: Number(active.currentGold) || 0,
     items: (player.items || []).map(item => ({ id: item.itemID, name: item.displayName, count: item.count })),
     health: Number(active.championStats?.currentHealth) || 0, maxHealth: Number(active.championStats?.maxHealth) || 0,
@@ -63,13 +78,16 @@ function sanitizeSettings(input, previous) {
   if (typeof input?.clickThrough === 'boolean') result.clickThrough = input.clickThrough;
   if (typeof input?.autoDownloadUpdates === 'boolean') result.autoDownloadUpdates = input.autoDownloadUpdates;
   if (typeof input?.opacity === 'number' && Number.isFinite(input.opacity)) result.opacity = Math.max(0.35, Math.min(1, input.opacity));
-  if (typeof input?.scale === 'number' && Number.isFinite(input.scale)) result.scale = Math.max(0.8, Math.min(1.4, input.scale));
+  if (typeof input?.scale === 'number' && Number.isFinite(input.scale)) result.scale = Math.max(0.45, Math.min(1.4, input.scale));
   if (typeof input?.csTarget === 'number' && Number.isFinite(input.csTarget)) result.csTarget = Math.max(1, Math.min(12, input.csTarget));
   if (['number', 'graph'].includes(input?.csDisplay)) result.csDisplay = input.csDisplay;
-  if (input?.widgets && typeof input.widgets === 'object') result.widgets = Object.fromEntries(['cs','vision','waves','goal'].map(key => {
-    const value = input.widgets[key] ?? (key === 'waves' ? input.widgets.gold : undefined);
-    return [key, typeof value === 'boolean' ? value : previous.widgets[key] ?? (key === 'waves' ? previous.widgets.gold : undefined) ?? true];
+  result.widgets = Object.fromEntries(['cs','vision','waves'].map(key => {
+    const value = input?.widgets?.[key] ?? (key === 'waves' ? input?.widgets?.gold : undefined);
+    return [key, typeof value === 'boolean' ? value : previous.widgets?.[key] ?? (key === 'waves' ? previous.widgets?.gold : undefined) ?? true];
   }));
+  if (input?.widgets?.goal === true && input.widgets.cs === false) result.widgets.cs = true;
+  result.reminders = sanitizeReminders(input?.reminders, previous.reminders);
+  result.scoreboard = sanitizeScoreboard(input?.scoreboard, previous.scoreboard);
   return result;
 }
 module.exports = { requestLive, normalizeLive, validateRunePage, sanitizeSettings };
