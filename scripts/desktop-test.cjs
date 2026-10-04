@@ -1,0 +1,11 @@
+const { spawn } = require('node:child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+const root = path.join(__dirname,'..');
+fs.mkdirSync(path.join(root,'.qa'),{recursive:true});
+const profile = fs.mkdtempSync(path.join(root,'.qa/test-profile-'));
+const env = { ...process.env, RIFT_DESKTOP_TEST:'1', RIFT_TEST_USER_DATA:profile };
+delete env.ELECTRON_RUN_AS_NODE;
+const child = spawn(require('electron'),[root],{cwd:root,env,stdio:'inherit',windowsHide:true});
+const timeout = setTimeout(()=>{child.kill();console.error('Desktop verification timed out.');process.exitCode=1;},65000);
+child.on('exit',code=>{clearTimeout(timeout);process.exitCode=code||0;});

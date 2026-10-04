@@ -1,0 +1,28 @@
+import { ArrowUpRight, ArrowRight, History, Monitor, Settings2 } from 'lucide-react';
+import type { AppState, Catalog, Match, Page } from './types';
+import { EmptyState, MatchRow, SectionHeading } from './components';
+import { chartPoints } from './metrics';
+
+export default function Dashboard({ view, catalog, navigate, onMatch, onOverlay, demo }: { view: AppState; catalog: Catalog; navigate(page: Page): void; onMatch(match: Match): void; onOverlay(): void; demo: boolean }) {
+  const matches = view.matches;
+  const wins = matches.filter(match => match.win).length;
+  const mean = (fn: (match: Match) => number) => matches.length ? matches.reduce((sum, match) => sum + fn(match), 0) / matches.length : 0;
+  const values = [...matches].reverse().map(match => match.cs / (match.duration / 60 || 1));
+  const max = Math.max(10, view.settings.csTarget + 1, ...values);
+  const rank = view.ranked;
+  const ranked = rank?.tier && rank.tier !== 'NONE';
+  const visionMatches = matches.filter(match => match.vision !== null);
+  return <>
+    <div className="page-heading"><div><h1>Your stats</h1><p>{view.summoner ? `${view.summoner.name}${view.summoner.tag ? ` #${view.summoner.tag}` : ''}` : 'Open League to connect your account'}</p></div><button className="primary-button" onClick={onOverlay}><Monitor size={18} aria-hidden="true"/>Open overlay</button></div>
+    <div className="dashboard-grid">
+      <section className="panel performance-panel">
+        <div className="panel-eyebrow"><span>Recent form</span><span>{matches.length ? `Last ${matches.length} games` : 'No games yet'}</span></div>
+        <div className="performance-numbers"><div className="winrate-stat"><span>Win rate</span><strong>{matches.length ? Math.round(wins / matches.length * 100) : '—'}{matches.length > 0 && <em>%</em>}</strong><small>{wins}W <span> / </span>{matches.length - wins}L</small></div><div><span>KDA</span><strong>{matches.length ? mean(match => (match.kills + match.assists) / Math.max(1, match.deaths)).toFixed(2) : '—'}</strong><small>{matches.length ? `${mean(m => m.kills).toFixed(1)} / ${mean(m => m.deaths).toFixed(1)} / ${mean(m => m.assists).toFixed(1)}` : '—'}</small></div><div><span>CS / min</span><strong>{matches.length ? mean(match => match.cs / (match.duration / 60 || 1)).toFixed(1) : '—'}</strong><small>Goal {view.settings.csTarget.toFixed(1)}</small></div><div><span>Vision</span><strong>{visionMatches.length ? Math.round(visionMatches.reduce((sum, match) => sum + (match.vision || 0), 0) / visionMatches.length) : '—'}</strong><small>Average</small></div></div>
+        <div className="performance-chart"><div className="chart-heading"><span>CS / min across matches</span><span className="chart-legend"><i/> Goal {view.settings.csTarget.toFixed(1)}</span></div><svg viewBox="0 0 640 132" role="img" aria-label={matches.length ? `CS per minute for the last ${matches.length} games: ${values.map(value => value.toFixed(1)).join(', ')}. Goal ${view.settings.csTarget}.` : 'No match data'} preserveAspectRatio="none"><line x1="0" x2="640" y1="130" y2="130" className="chart-grid"/><line x1="0" x2="640" y1="65" y2="65" className="chart-grid"/><line x1="0" x2="640" y1={132 - view.settings.csTarget / max * 124} y2={132 - view.settings.csTarget / max * 124} className="chart-goal"/>{values.length > 1 && <polyline points={chartPoints(values, 640, 132, max)} className="chart-line"/>}{values.map((value, i) => <circle key={i} cx={values.length < 2 ? 320 : i / (values.length - 1) * 640} cy={132 - value / max * 124} r="3.5" className="chart-point"><title>{value.toFixed(1)} CS / min</title></circle>)}</svg><div className="chart-axis"><span>Oldest</span><span>Latest</span></div></div>
+      </section>
+      <section className="panel rank-summary"><div className="panel-eyebrow"><span>Solo / Duo</span><span className="status-dot"/></div><h2>{ranked ? `${rank.tier[0]}${rank.tier.slice(1).toLowerCase()} ${rank.division}` : 'Unranked'}</h2><div className="rank-lp">{ranked ? rank.leaguePoints : '—'}<span>LP</span></div><div className="rank-track"><i style={{ width: `${Math.min(100, rank?.leaguePoints || 0)}%` }}/></div><div className="rank-record"><span>{rank?.wins || 0} wins</span><span>{rank?.losses || 0} losses</span></div><button className="text-button" onClick={() => navigate('history')}>Match history<ArrowUpRight size={16}/></button></section>
+    </div>
+    <section className="overlay-quick panel"><div><span className="eyebrow">IN GAME</span><h2>Overlay</h2></div><div className="quick-widget-labels"><span>CS / min</span><span>Vision</span><span>Gold to item</span><span>CS goal</span></div><button className="secondary-button" onClick={() => navigate('overlay')}><Settings2 size={17} aria-hidden="true"/>Edit overlay</button></section>
+    <section className="recent-matches"><SectionHeading title="Recent matches" detail={demo ? 'Sample data' : undefined} action={<button className="text-button" onClick={() => navigate('history')}>View all<ArrowRight size={16}/></button>}/>{matches.length ? <div className="match-list">{matches.slice(0, 4).map(match => <MatchRow key={match.id} match={match} catalog={catalog} onClick={() => onMatch(match)}/>)}</div> : <div className="panel"><EmptyState icon={<History size={28}/>} title="Your next game starts here" body="Your recent matches will appear when League connects."/></div>}</section>
+  </>;
+}

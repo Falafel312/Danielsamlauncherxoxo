@@ -1,36 +1,67 @@
-# Danielsamlauncherxoxo
+# DPM.lol
 
-A Windows League of Legends companion with champion guides, editable runes, recent matches, and a configurable desktop overlay. The app interface is called **Rift**.
+A Windows League companion with player stats, OP.GG builds and runes, and a minimal transparent overlay.
 
-[Download the Windows installer](https://github.com/Falafel312/Danielsamlauncherxoxo/releases/latest) · [All releases](https://github.com/Falafel312/Danielsamlauncherxoxo/releases)
+[Download DPM.lol for Windows](https://github.com/Falafel312/Danielsamlauncherxoxo/releases/latest)
 
-## Start
+## Version 0.2.0
 
-1. Install **Danielsamlauncherxoxo-Setup-0.1.0.exe** from the latest release.
-2. Open League of Legends. The launcher connects to the local client automatically.
-3. Set League's display mode to **Borderless** or **Windowed** for the overlay.
+- DPM.lol branding throughout the app, window titles, launcher, and installer.
+- Player stats replace the champion spotlight: win rate, KDA, CS/min trend, vision, and rank.
+- Translucent charcoal panels, larger controls and numbers, and fewer labels.
+- Four independent overlay widgets: **CS/min**, **vision score**, **gold to item**, and **CS/min goal**.
+- CS/min supports **Number** and **Graph + number** modes. Opacity, size, target item, and CS goal are configurable.
+- The overlay has no champion banner or logo. Its move controls appear only when unlocked.
+- Builds and rune presets load from [OP.GG](https://op.gg/lol/champions), with champion and role selection, source links, patch, and fetch time.
 
-Use **Ctrl + Shift + O** to toggle the overlay and **Ctrl + Shift + L** to unlock its position. Drag the header, then lock it again. **Overlay studio** controls widgets, opacity, size, and your CS goal. If another app uses a shortcut, use the buttons in the launcher.
+## Install
 
-## Updates
+Download **DPM.lol-Setup-0.2.0.exe** from Releases. Open League and use Borderless or Windowed display mode for the overlay.
 
-The installed launcher checks this repository on startup and every four hours. New versions download automatically. Click **Restart & install** when the download is ready. Restarting for an update is blocked during an active League game.
+The installed app downloads updates automatically. The portable **DPM.lol.exe** is also available, but does not update itself. Existing installations retain their update identity and saved preferences.
 
-The portable **Danielsamlauncherxoxo.exe** is also available in each release. It does not update itself; use the installer for automatic updates.
+| Shortcut | Action |
+| --- | --- |
+| Ctrl + Shift + O | Show or hide overlay |
+| Ctrl + Shift + L | Unlock or lock position |
+| Ctrl + K | Search champions |
 
-## Included
+Choose an item in **Overlay**, or click **Track item** in a build. The gold counter subtracts available gold and owned components from that item's recipe cost. It shows a check when the item is already owned.
 
-- All 173 champions from Riot Data Dragon patch 16.19.1, with search and favorites.
-- Curated item guides and a rune editor with local saves and import to League.
-- Local account, rank, up to 20 recent matches, and match details.
-- Visible champion-select picks.
-- Your live KDA, CS, gold, inventory, and health.
-- Transparent overlay with movable position, click-through, and selectable widgets.
+CS history records samples while DPM.lol is connected to a game; it does not invent earlier samples. Missing vision data displays a dash. Sample data is available only in explicit demo mode and the labeled settings preview.
 
-Rune imports create or update a page named `Rift • Champion`. The first import requires a free editable rune slot.
+## Builds and runes
 
-Guides are curated starting points. Global win-rate rankings, DPM ratings, esports, and gameplay recording are not included. The local League client interfaces may change with game updates.
+OP.GG requests run in Electron's main process over HTTPS. The app parses server-rendered JSON without executing third-party scripts. Results use Global / Emerald+ data and are cached for six hours. If the provider is unavailable, saved results up to seven days old are labeled **Offline cache**. Provider markup or rune changes can make a build temporarily unavailable; the app shows an error and retry instead of substituting a made-up recommendation.
 
-This repository hosts release downloads and update files. League credentials stay on your PC and are not uploaded to GitHub. The installer is currently unsigned.
+Rune pages are editable and can be saved locally. Import creates or updates **DPM.lol • Champion**, reusing the earlier **Rift • Champion** page when present. Other rune pages stay intact. A first import needs a free editable slot. Imports are blocked during active games.
 
-Rift Companion is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+## Development
+
+Node.js 24+ on Windows:
+
+```powershell
+npm ci
+npm run dev
+```
+
+```powershell
+npm test
+npm run build
+npm run test:desktop
+npm run dist
+```
+
+`npm run dev:web` provides a browser preview with an OP.GG proxy. League access, rune import, and the native overlay require Electron. `npm run refresh:data` refreshes the bundled Riot Data Dragon catalog.
+
+The desktop test uses an isolated profile. It verifies navigation, live build fetching, saved rune edits, overlay settings and window behavior, responsive layouts, and IPC boundaries. It reads the current League connection when one is available, but never imports a rune page or modifies League. Screenshots and reports are saved under ignored `.qa/`.
+
+## Data and updates
+
+Account, rank, matches, and current game stats come from the local League client. Champion, item, and rune metadata come from [Riot Data Dragon](https://developer.riotgames.com/docs/lol#data-dragon). Local League APIs and third-party build markup can change.
+
+League credentials remain in Electron's main process, are never persisted, and are never sent to OP.GG or GitHub. The renderer uses a sandbox, context isolation, a restrictive content security policy, and an allowlisted IPC bridge.
+
+This repository retains its original URL so earlier installations keep receiving updates. Release assets are `DPM.lol-Setup-VERSION.exe`, its `.blockmap`, `DPM.lol.exe`, and `latest.yml`. Upload the manifest last; it references the installer's SHA-512 checksum. Restarting to install an update is blocked during a game. The current Windows builds are unsigned.
+
+DPM.lol is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
