@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
 module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing,getOverlay }) {
   const root = path.join(__dirname,'../.qa');
+  let fixtureServer;
   const report = { passed:false, checks:[], rendererErrors:[], client:null };
   mainWindow.webContents.on('console-message',event=>{ if(event.level === 'error') report.rendererErrors.push(event.message); });
   const evaluate = js => mainWindow.webContents.executeJavaScript(js,true);
@@ -19,7 +20,10 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     await delay(2600);
     const state=getState();
     report.client={ connection:state.connection,phase:state.phase,matches:state.matches.length,live:!!state.live,hasRank:!!state.ranked };
-    if(state.connection!=='offline') { assert.ok(state.summoner || state.live); report.checks.push('Actual running League client connected; account data normalized'); }
+    if(state.live) report.checks.push('Actual live game connected through Riot Live Client Data API');
+    assert.equal(state.profile.status, 'unconfigured');
+    assert.equal(await evaluate('typeof window.rift.importRunes'), 'undefined');
+    assert.equal(await evaluate('typeof window.rift.chooseLeagueFolder'), 'undefined');
     assert.equal(await evaluate('typeof window.require'), 'undefined');
     assert.equal(await evaluate('typeof window.rift.getState'), 'function');
     report.checks.push('Renderer has isolated context and limited IPC bridge');
@@ -55,9 +59,8 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     assert.equal(await evaluate("document.querySelectorAll('.match-row').length"),3);
     await snapshot('history');report.checks.push('Match result filtering works');
     await navigate('Live game');assert.equal(await evaluate("!!document.querySelector('.live-player-heading')"),true);await snapshot('live');
-    await evaluate("[...document.querySelectorAll('.tabs button')].find(b=>b.textContent.includes('Champion select')).click()");await delay(100);
-    assert.equal(await evaluate("document.querySelectorAll('.draft-slot').length"),5);
-    report.checks.push('Live stats and visible champion-select picks render correctly');
+    assert.equal(await evaluate("document.body.textContent.includes('Champion select')"),false);
+    report.checks.push('Live stats render without unsupported champion-select controls');
     await navigate('Overlay');
     assert.equal(await evaluate("!!document.querySelector('#target-item')"), false);
     await until("!!document.querySelector('.hud-waves img')");
@@ -119,7 +122,46 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     report.checks.push('New reward gold recalculates the native HUD; automatic live polling stays below ten seconds');
     await showOverlay(false);assert.equal(overlay.isVisible(),false);
     report.checks.push('Native overlay is always on top, unlocks for dragging, relocks without focus, and hides');
-    await navigate('Settings');await snapshot('settings');
+    await navigate('Settings');
+    const { createServer } = require('../server/index.cjs');
+    let fixtureCalls = 0;
+    fixtureServer = createServer({ service: { configured: true, getProfile: async input => {
+      fixtureCalls++;
+      assert.equal(input.riotId, 'API Tester#TEST'); assert.equal(input.platform, 'euw1');
+      return { summoner: { name: 'API Tester', tag: 'TEST', level: 100, icon: 29 }, ranked: { tier: 'EMERALD', division: 'II', leaguePoints: 68, wins: 30, losses: 20 }, matches: [{ id: 'EUW1_1234', championKey: '103', win: true, kills: 5, deaths: 2, assists: 8, cs: 197, duration: 1800, timestamp: Date.now() - 3600000, queueId: 420, damage: 23000, gold: 12500, vision: 25, items: [1056,3118] }], fetchedAt: new Date().toISOString(), notice: '', retryAfter: 0 };
+    } } });
+    await new Promise(resolve => fixtureServer.listen(0, '127.0.0.1', resolve));
+    const backendUrl = `http://127.0.0.1:${fixtureServer.address().port}`;
+    const invalidAccount = await evaluate("window.rift.configureAccount({serverUrl:'http://unsafe.example',riotId:'API Tester#TEST',platform:'euw1'})");
+    assert.equal(invalidAccount.ok, false);
+    const setInput = async (label,value) => evaluate(`(()=>{const i=document.querySelector('[aria-label="${label}"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await setInput('Riot ID', 'API Tester#TEST');
+    await delay(3300);
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Riot ID\"]').value"), 'API Tester#TEST', 'Live polls must not reset account form edits');
+    await evaluate("document.querySelector('.account-backend').open=true");
+    await setInput('Riot backend URL',backendUrl);
+    await evaluate("document.querySelector('.riot-account form').requestSubmit()");
+    await until("document.querySelector('.account-status').classList.contains('connected')");
+    assert.equal(getState().summoner.name, 'API Tester'); assert.equal(getState().matches.length,1); assert.equal(fixtureCalls,1);
+    await snapshot('settings');
+    await evaluate("document.querySelector('.demo-switch').click()");
+    await navigate('Your stats');
+    assert.equal(await evaluate("document.querySelector('.page-heading').textContent.includes('API Tester')"),true);
+    assert.equal(await evaluate("document.querySelectorAll('.match-row').length"),1);
+    await snapshot('riot-account-stats');
+    await new Promise(resolve=>fixtureServer.close(resolve));fixtureServer=null;
+    await evaluate('window.rift.refresh()');
+    assert.equal(getState().profile.status,'error'); assert.equal(getState().matches.length,1);
+    await navigate('Settings');
+    assert.equal(await evaluate("document.querySelector('.account-status').textContent.includes('Start it or check the URL')"),true);
+    await snapshot('riot-backend-offline');
+    report.checks.push('Riot account settings validate URLs, preserve typing during live polls, load real HTTP fixture data, and retain cached stats when the backend is offline');
+    await evaluate("[...document.querySelectorAll('.riot-account button')].find(b=>b.textContent==='Disconnect').click()");
+    await until("document.querySelector('.account-status').classList.contains('unconfigured')");
+    assert.equal(getState().summoner,null);assert.equal(getState().matches.length,0);
+    report.checks.push('Disconnect clears cloud account data without touching the live overlay');
+    await evaluate("document.querySelector('.demo-switch').click()");
+
     assert.equal(await evaluate("document.querySelector('.about-info').textContent.includes('Riot Data Dragon')"),true);
     assert.equal(await evaluate("document.querySelector('[aria-label=\"Automatically download app updates\"]').getAttribute('aria-checked')"),'true');
     assert.equal(getState().updates.status,'unsupported');
@@ -128,8 +170,8 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     await evaluate("document.querySelector('.update-settings').scrollIntoView({block:'center'})");await snapshot('updates');
     report.checks.push('Automatic downloads default on, GitHub release server is preconfigured, and unsafe URLs are rejected');
     const preferences=await fs.readFile(path.join(app.getPath('userData'),'preferences.json'),'utf8');
-    assert.equal(preferences.includes('password'),false);assert.equal(preferences.includes('Authorization'),false);
-    report.checks.push('Preferences contain no League authentication token');
+    assert.equal(preferences.includes('password'),false);assert.equal(preferences.includes('Authorization'),false);assert.equal(preferences.includes('lockfile'),false);assert.equal(preferences.includes('RIOT_API_KEY'),false);
+    report.checks.push('Preferences contain no API key, obsolete lockfile path, or authentication token');
     await navigate('Your stats');
     mainWindow.setMinimumSize(300,300);
     for (const [width,height] of [[1024,768],[768,1024],[375,812],[812,375]]) {
@@ -146,6 +188,7 @@ module.exports = async function({ app,mainWindow,getState,showOverlay,setEditing
     assert.equal(report.rendererErrors.length,0,report.rendererErrors.join('\n'));
     report.passed=true;
   } catch(error) { report.error=error.stack;console.error(error.stack); }
+  if (fixtureServer) await new Promise(resolve=>fixtureServer.close(resolve));
   await fs.writeFile(path.join(root,'desktop-report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
   app.exit(report.passed?0:1);

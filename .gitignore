@@ -3,3 +3,8 @@ dist/
 release/
 .qa/
 *.log
+
+.env
+.env.*
+!.env.example
+server/.env

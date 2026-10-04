@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { goldForItem, nextBuildItem, wavesForItem, averageWaveGold, chartPoints } = require('../src/metrics.ts');
-const { normalizeLive, sanitizeSettings, upsertRunePage } = require('../electron/league.cjs');
+const { normalizeLive, sanitizeSettings } = require('../electron/league.cjs');
 const items = { 1: { gold: { total: 300 } }, 2: { gold: { total: 800 }, from: ['1', '1'] }, 3: { gold: { total: 2000 }, from: ['2', '1'] } };
 const live = (gold, inventory) => ({ gold, items: inventory.map(([id, count = 1]) => ({ id, count })) });
 const buildItems = { ...items, 1001: { gold: { total: 300 }, tags: ['Boots'] }, 3006: { gold: { total: 1100 }, from: ['1001'], tags: ['Boots'] }, 3047: { gold: { total: 1200 }, from: ['1001'], tags: ['Boots'] }, 101: { gold: { total: 2700 }, from: ['201'] }, 102: { gold: { total: 3000 }, from: ['202'] }, 103: { gold: { total: 3200 } }, 104: { gold: { total: 2800 } }, 105: { gold: { total: 3100 } }, 106: { gold: { total: 3400 } }, 201: { gold: { total: 900 } }, 202: { gold: { total: 1200 } }, 501: { gold: { total: 2700, purchasable: false }, from: ['101'] } };
@@ -118,11 +118,4 @@ test('new overlay settings survive migration and reject invalid values', () => {
   assert.equal(sanitizeSettings({ widgets: { gold: false } }, defaults).widgets.waves, false);
   assert.equal(sanitizeSettings({ widgets: { waves: true, gold: false } }, defaults).widgets.waves, true);
   assert.equal(sanitizeSettings({ widgets: { gold: false } }, defaults).widgets.gold, undefined);
-});
-test('renamed app reuses its existing Rift rune page without taking an extra slot', async () => {
-  const calls = [];
-  const request = async (_auth, url, method = 'GET', body) => { calls.push({ url, method, body }); return method === 'GET' ? [{ id: 5, name: 'Rift • Ahri', isEditable: true }, { id: 7, name: 'Personal page', isEditable: true }] : null; };
-  await upsertRunePage({}, { champion: 'Ahri', primaryStyleId: 8100, subStyleId: 8200, selectedPerkIds: [8112,8139,8137,8106,8226,8210,5005,5008,5001] }, require('../public/data/runes.json'), request);
-  assert.equal(calls[1].url, '/lol-perks/v1/pages/5');
-  assert.equal(calls[1].method, 'PUT'); assert.equal(calls[1].body.name, 'DPM.lol • Ahri');
 });

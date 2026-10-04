@@ -1,50 +1,30 @@
 const https = require('node:https');
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { execFile } = require('node:child_process');
-// Only this loopback agent accepts League's self-signed certificate.
-const leagueAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true, maxSockets: 6 });
-function requestLocal({ port, password }, endpoint, method = 'GET', body) {
-  if (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535 || !endpoint.startsWith('/')) return Promise.reject(new Error('Invalid local endpoint.'));
+// Riot documents this self-signed HTTPS service on loopback port 2999.
+// The endpoint, port and read-only method cannot be supplied by the renderer.
+const leagueAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true, maxSockets: 2 });
+function requestLive() {
   return new Promise((resolve, reject) => {
-    const data = body ? JSON.stringify(body) : undefined;
-    const headers = { Accept: 'application/json' };
-    if (password) headers.Authorization = `Basic ${Buffer.from(`riot:${password}`).toString('base64')}`;
-    if (data) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(data); }
-    const req = https.request({ hostname: '127.0.0.1', port, path: endpoint, method, headers, agent: leagueAgent, timeout: 2200 }, res => {
+    const req = https.get({ hostname: '127.0.0.1', port: 2999, path: '/liveclientdata/allgamedata', headers: { Accept: 'application/json' }, agent: leagueAgent }, res => {
       const chunks = []; let size = 0;
-      res.on('data', chunk => { size += chunk.length; if (size > 8 * 1024 * 1024) req.destroy(new Error('Local response too large.')); else chunks.push(chunk); });
+      res.on('data', chunk => { size += chunk.length; if (size > 8 * 1024 * 1024) req.destroy(new Error('Live response too large.')); else chunks.push(chunk); });
+      res.on('error', () => req.destroy(new Error('Live connection interrupted.')));
       res.on('end', () => {
-        if (res.statusCode < 200 || res.statusCode >= 300) { const err = new Error(`League client returned ${res.statusCode}.`); err.status = res.statusCode; reject(err); return; }
-        try { const text = Buffer.concat(chunks).toString('utf8'); resolve(text ? JSON.parse(text) : null); } catch { reject(new Error('Invalid League response.')); }
+        if (res.statusCode !== 200) return reject(new Error('No live game is available.'));
+        try { resolve(normalizeLive(JSON.parse(Buffer.concat(chunks).toString('utf8')))); }
+        catch { reject(new Error('Incomplete live game data.')); }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('League connection timed out.')));
+    const timer = setTimeout(() => req.destroy(new Error('Live connection timed out.')), 2200);
+    req.on('close', () => clearTimeout(timer));
     req.on('error', reject);
-    if (data) req.write(data);
-    req.end();
   });
-}
-function parseLockfile(text) {
-  const [name, pid, port, password, protocol] = text.trim().split(':');
-  if (!name || !/^\d+$/.test(pid || '') || !/^\d+$/.test(port || '') || Number(port) < 1 || Number(port) > 65535 || !password || protocol !== 'https') throw new Error('Invalid League lockfile.');
-  return { port: Number(port), password };
-}
-async function discoverLockfile(customPath, cachedPath) {
-  const candidates = [customPath, cachedPath, 'C:/Riot Games/League of Legends/lockfile', 'D:/Riot Games/League of Legends/lockfile', 'C:/Program Files/Riot Games/League of Legends/lockfile', 'C:/Program Files (x86)/Riot Games/League of Legends/lockfile'].filter(Boolean);
-  for (const candidate of candidates) { try { return { ...parseLockfile(await fs.readFile(candidate, 'utf8')), file: candidate }; } catch {} }
-  if (process.platform !== 'win32') return null;
-  const executable = await new Promise(resolve => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "(Get-CimInstance Win32_Process -Filter \"Name='LeagueClientUx.exe'\" -ErrorAction SilentlyContinue | Select-Object -First 1).ExecutablePath"], { windowsHide: true, timeout: 3500 }, (err, stdout) => resolve(err ? '' : stdout.trim()));
-  });
-  if (executable) { try { const file = path.join(path.dirname(executable), 'lockfile'); return { ...parseLockfile(await fs.readFile(file, 'utf8')), file }; } catch {} }
-  return null;
 }
 function normalizeLive(raw) {
   if (!raw?.activePlayer || !raw?.gameData || !Array.isArray(raw.allPlayers)) throw new Error('Incomplete live game data.');
   const active = raw.activePlayer;
   const identity = active.riotId || active.summonerName;
-  const player = raw.allPlayers.find(p => (p.riotId || p.summonerName) === identity || (p.riotIdGameName && p.riotIdGameName === active.riotIdGameName));
+  const player = raw.allPlayers.find(p => identity && (p.riotId || p.summonerName) === identity)
+    || raw.allPlayers.find(p => active.riotIdGameName && active.riotIdTagLine && p.riotIdGameName === active.riotIdGameName && p.riotIdTagLine === active.riotIdTagLine);
   if (!player) throw new Error('Active player is missing from the live game.');
   const scores = player.scores || {};
   const seconds = Math.max(0, Number(raw.gameData.gameTime) || 0);
@@ -63,17 +43,6 @@ function normalizeLive(raw) {
     mapNumber: Number.isInteger(raw.gameData.mapNumber) ? raw.gameData.mapNumber : null,
     role: ({ TOP: 'top', JUNGLE: 'jungle', MIDDLE: 'mid', BOTTOM: 'adc', UTILITY: 'support' })[player.position] || 'auto',
   };
-}
-function normalizeMatches(raw, summonerId) {
-  const games = raw?.games?.games || raw?.games || [];
-  if (!Array.isArray(games)) return [];
-  return games.map(game => {
-    const identity = game.participantIdentities?.find(p => Number(p.player?.summonerId) === Number(summonerId));
-    const participant = game.participants?.find(p => p.participantId === identity?.participantId) || (game.participants?.length === 1 ? game.participants[0] : null);
-    if (!participant) return null;
-    const stats = participant.stats || {};
-    return { id: String(game.gameId), championKey: String(participant.championId), win: !!stats.win, kills: stats.kills || 0, deaths: stats.deaths || 0, assists: stats.assists || 0, cs: (stats.totalMinionsKilled || 0) + (stats.neutralMinionsKilled || 0), duration: game.gameDuration || 0, timestamp: game.gameCreation || 0, queueId: game.queueId, damage: stats.totalDamageDealtToChampions || 0, gold: stats.goldEarned || 0, vision: typeof stats.visionScore === 'number' && Number.isFinite(stats.visionScore) ? stats.visionScore : null, items: [0,1,2,3,4,5].map(i => stats[`item${i}`]).filter(Boolean) };
-  }).filter(Boolean);
 }
 function validateRunePage(input, paths) {
   if (!input || typeof input.champion !== 'string' || !/^[A-Za-z0-9]{1,30}$/.test(input.champion)) throw new Error('Choose a valid champion.');
@@ -103,13 +72,4 @@ function sanitizeSettings(input, previous) {
   }));
   return result;
 }
-async function upsertRunePage(credentials, input, paths, request = requestLocal) {
-  const page = validateRunePage(input, paths);
-  const pages = await request(credentials, '/lol-perks/v1/pages');
-  const owned = pages.find(p => p.name === page.name && p.isEditable !== false)
-    || pages.find(p => p.name === `Rift • ${input.champion}` && p.isEditable !== false);
-  if (owned) await request(credentials, `/lol-perks/v1/pages/${owned.id}`, 'PUT', page);
-  else await request(credentials, '/lol-perks/v1/pages', 'POST', page);
-  return page.name;
-}
-module.exports = { requestLocal, parseLockfile, discoverLockfile, normalizeLive, normalizeMatches, validateRunePage, sanitizeSettings, upsertRunePage };
+module.exports = { requestLive, normalizeLive, validateRunePage, sanitizeSettings };
